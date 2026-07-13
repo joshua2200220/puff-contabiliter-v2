@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PuffStock - Accès Sécurisé</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/png" href="icon.png">
+    <meta name="theme-color" content="#6c5ce7">
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+    <style>
+        :root {
+            --primary: #6c5ce7;--bg: #f8f9fa;--text: #2d3436;--card: #ffffff;--danger: #ff7675;--success: #00b894;--secondary: #0984e3;
+        }
+        body { font-family: -apple-system, sans-serif; margin: 0; padding: 0; background-color: var(--bg); color: var(--text); }
+        header { background: var(--primary); color: white; padding: 15px; text-align: center; font-size: 1.2rem; font-weight: bold; }
+        .container { padding: 15px; max-width: 800px; margin: 0 auto; }
+        .card { background: var(--card); border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        h2 { margin-top: 0; color: var(--primary); font-size: 1.3rem; border-bottom: 2px solid #f1f2f6; padding-bottom: 8px; }
+        .form-row { display: flex; gap: 10px; margin-bottom: 12px; }
+        .form-row input { flex: 2; }
+        .form-row button { flex: 1; }
+        label { display: block; margin-bottom: 5px; font-weight: 500; font-size: 0.9rem; }
+        input, select, button { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #ddd; box-sizing: border-box; font-size: 1rem; }
+        button { background: var(--primary); color: white; border: none; font-weight: bold; cursor: pointer; }
+        .kpi-box { background: #f1f2f6; padding: 12px; border-radius: 8px; text-align: center; }
+        .kpi-val { font-size: 1.4rem; font-weight: bold; margin-top: 5px; }
+        .stock-item { background: #fafafa; border: 1px solid #edf2f7; border-radius: 8px; padding: 12px; margin-bottom: 10px; }
+        .stock-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .stock-title { font-weight: bold; font-size: 1.1rem; }
+        .stock-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+        .qty-controls { display: flex; align-items: center; gap: 5px; }
+        .btn-qty { width: 35px; padding: 5px; background: #e4e7eb; color: #333; }
+        .input-qty { width: 60px; text-align: center; padding: 5px; }
+        .btn-sell { background: var(--success); width: auto; padding: 6px 12px; }
+        .btn-delete { background: var(--danger); width: auto; padding: 6px 12px; }
+        .btn-danger-outline { background: transparent; color: var(--danger); border: 1px solid var(--danger); margin-top: 10px; }
+        canvas { max-width: 100%; height: auto; border-radius: 8px; display: none; margin-top: 15px; }
+        
+        /* Écrans d'authentification */
+        .auth-screen { display: flex; flex-direction: column; gap: 15px; max-width: 400px; margin: 100px auto padding: 20px; }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+    <!-- 1. ÉCRAN DE SÉLECTION (CONNEXION OU CRÉATION) -->
+    <div id="authSelectionScreen" class="container auth-screen">
+        <div class="card" style="text-align: center;">
+            <h2>💨 Connexion PuffStock</h2>
+            <p>Choisissez une option pour continuer :</p>
+            <button onclick="basculerEcran('loginScreen')" style="margin-bottom: 10px;">Se connecter</button>
+            <button onclick="basculerEcran('registerScreen')" style="background: var(--secondary);">Créer un compte</button>
+        </div>
+    </div>
+
+    <!-- 2. ÉCRAN CONNEXION -->
+    <div id="loginScreen" class="container auth-screen hidden">
+        <div class="card">
+            <h2>🔑 Connexion</h2>
+            <div class="form-group">
+                <label>Identifiant / Pseudo</label>
+                <input type="text" id="loginUser" placeholder="Ton pseudo">
+            </div>
+            <div class="form-group">
+                <label>Mot de passe</label>
+                <input type="password" id="loginPass" placeholder="Ton mot de passe">
+            </div>
+            <button onclick="connexion()" style="margin-bottom: 10px;">Valider la connexion</button>
+            <button onclick="basculerEcran('authSelectionScreen')" style="background:#ccc; color:#333;">Retour</button>
+        </div>
+    </div>
+
+    <!-- 3. ÉCRAN INSCRIPTION & ATTENTE ACCORD -->
+    <div id="registerScreen" class="container auth-screen hidden">
+        <div class="card">
+            <h2>📝 Demande de création de compte</h2>
+            <div id="formulaireInscription">
+                <div class="form-group">
+                    <label>Pseudo souhaité</label>
+                    <input type="text" id="regUser" placeholder="Ex: Lucas">
+                </div>
+                <div class="form-group">
+                    <label>Mot de passe</label>
+                    <input type="password" id="regPass" placeholder="Créer un mot de passe">
+                </div>
+                <button onclick="demanderAccordCreation()" style="margin-bottom: 10px;">Envoyer la demande d'accord</button>
+            </div>
+
+            <!-- Zone qui apparaît une fois le mail envoyé chez toi -->
+            <div id="zoneActivationCompte" class="hidden" style="background:#f0fff4; padding:12px; border-radius:8px; border:1px solid #c6f6d5; margin-top:10px;">
+                <p style="font-size:0.9rem; color:#276749;"><strong>Demande envoyée !</strong> Demande le code d'activation à Joshua. Dès qu'il te le donne, saisis-le ici :</p>
+                <input type="text" id="codeActivationSaisi" placeholder="Code secret d'approbation" style="margin-bottom:10px;">
+                <button onclick="finaliserInscription()" style="background:var(--success);">Activer définitivement mon compte</button>
+            </div>
+            <button onclick="basculerEcran('authSelectionScreen')" style="background:#ccc; color:#333; margin-top:10px;">Retour</button>
+        </div>
+    </div>
+
+
+    <!-- 4. APPLICATION PRINCIPALE (MASQUÉE PAR DÉFAUT TANT QU'ON EST PAS CONNECTÉ) -->
+    <div id="appScreen" class="hidden">
+        <header>💨 PuffStock - Connecté en tant que : <span id="usernameConnecte">...</span> <button onclick="deconnexion()" style="width:auto; padding:5px 10px; font-size:0.8rem; background:var(--danger); margin-left:10px;">Déconnexion</button></header>
+        
+        <div class="container">
+            <!-- COMPTABILITÉ & FINANCES -->
+            <div class="card">
+                <h2>💰 Caisse et Comptabilité</h2>
+                <div class="kpi-box">
+                    <label>Solde de la Caisse</label>
+                    <div class="kpi-val" id="totalVentes" style="color: var(--success);">0.00 €</div>
+                </div>
+                
+                <!-- RETRAIT -->
+                <div style="background: #fff8f8; padding: 12px; border-radius: 8px; border: 1px solid #ffe3e3; margin-top: 15px;">
+                    <label><strong>Retirer de l'argent (Code PIN : 0910)</strong></label>
+                    <div class="form-row">
+                        <input type="number" id="montantRetrait" placeholder="Montant à retirer (€)">
+                        <input type="password" id="codeRetrait" placeholder="Code PIN">
+                        <button onclick="retirerArgent()" style="background: var(--secondary);">Retirer</button>
+                    </div>
+                </div>
+
+                <!-- AJOUT MANUEL -->
+                <div style="background: #f0fff4; padding: 12px; border-radius: 8px; border: 1px solid #c6f6d5; margin-top: 15px;">
+                    <label><strong>Ajouter de l'argent (Code PIN : 091010)</strong></label>
+                    <div class="form-row">
+                        <input type="number" id="montantAjout" placeholder="Montant à ajouter (€)">
+                        <input type="password" id="codeAjout" placeholder="Code PIN">
+                        <button onclick="ajouterArgentManuel()" style="background: var(--success);">Ajouter</button>
+                    </div>
+                </div>
+
+                <!-- REMISE À ZÉRO PAR MAIL -->
+                <div style="margin-top: 15px; text-align: center;">
+                    <button class="btn-danger-outline" onclick="demanderCodeVerification()">🔄 Réinitialiser la caisse via E-mail</button>
+                    <div id="zoneVerificationMail" style="display:none; margin-top:10px; padding:10px; background:#edf2f7; border-radius:8px;">
+                        <label>Entrez le code aléatoire reçu sur ton mail :</label>
+                        <div class="form-row">
+                            <input type="text" id="codeSaisiMail" placeholder="Ex: 583921">
+                            <button onclick="validerRemiseAZero()" style="background:var(--danger);">Valider la RAZ</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- AJOUTER UNE NOUVELLE PUFF -->
+            <div class="card">
+                <h2>➕ Ajouter une nouvelle Puff</h2>
+                <div class="form-row">
+                    <input type="text" id="newSaveur" placeholder="Ex: Blue Razz Ice">
+                    <input type="number" id="newPrix" placeholder="Prix de vente (€)" step="0.1">
+                </div>
+                <input type="number" id="newStock" placeholder="Stock de départ" value="10" style="margin-bottom: 10px;">
+                <button onclick="ajouterPuff()">Créer la référence</button>
+            </div>
+
+            <!-- LISTE DES STOCKS -->
+            <div class="card">
+                <h2>📦 Inventaire & Ventes</h2>
+                <div id="listeStocks"></div>
+            </div>
+
+            <!-- STUDIO PHOTO MARKETING -->
+            <div class="card">
+                <h2>🎨 Studio Photo Marketing</h2>
+                <input type="file" id="imageInput" accept="image/*" style="margin-bottom: 10px;">
+                <div class="form-row">
+                    <input type="color" id="bgColor" value="#6c5ce7">
+                    <input type="text" id="prixTexte" value="7.00 € l'unité">
+                </div>
+                <select id="promoTexte" style="margin-bottom: 10px;">
+                    <option value="🔥 OFFRE FLASH : 3 ACHETÉES = 1 OFFERTE 🔥">3 Achetées = 1 Offerte</option>
+                    <option value="⚡ PROMO UNIK : -20% SUR TOUT LE STOCK ⚡">Réduction -20%</option>
+                </select>
+                <button id="btnGenerer">✨ Générer l'image</button>
+                <canvas id="marketingCanvas" width="1080" height="1920"></canvas>
+                <button id="btnTelecharger" style="margin-top: 15px; display: none; background: #0984e3;">📥 Télécharger l'image</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- TA CONFIGURATION EMAILJS CONSTANTE ---
+        const EMAILJS_USER_ID = "IsYn_ZI0pnOMrL8kG"; 
+        const EMAILJS_TEMPLATE_ID = "template_o05ouoy";
+        const EMAILJS_SERVICE_ID = "service_gmail";
+        const MON_ADRESSE_MAIL = "Joshuacanu368@gmail.com"; 
+
+        emailjs.init(EMAILJS_USER_ID);
+
+        // Variables d'état
+        let codeAleatoireGenere = null;
+        let compteEnCoursCreation = null;
+
+        // Base de données simulée localement (Membres enregistrés)
+        // Par défaut, ton compte à toi est déjà créé pour que tu puisses te connecter directement !
+        let comptesMembres = JSON.parse(localStorage.getItem('puff_comptes')) || [
+            { user: "joshua", pass: "0910" } 
+        ];
+
+        let stocks = JSON.parse(localStorage.getItem('puff_stocks')) || [];
+        let totalVentes = parseFloat(localStorage.getItem('puff_ventes')) || 0;
+
+        // --- SYSTEME AUTHENTIFICATION ---
+        function basculerEcran(idEcran) {
+            document.getElementById('authSelectionScreen').classList.add('hidden');
+            document.getElementById('loginScreen').classList.add('hidden');
+            document.getElementById('registerScreen').classList.add('hidden');
+            document.getElementById('appScreen').classList.add('hidden');
+            document.getElementById(idEcran).classList.remove('hidden');
+        }
+
+        // Étape 1 : Quelqu'un s'inscrit -> Génère le code et t'envoie un mail de demande d'accord
+        function demanderAccordCreation() {
+            const user = document.getElementById('regUser').value.trim().toLowerCase();
+            const pass = document.getElementById('regPass').value;
+
+            if(!user || !pass) return alert("Remplis tous les champs !");
+            
+            // Vérifier si le pseudo existe déjà
+            if(comptesMembres.find(c => c.user === user)) return alert("Ce pseudo est déjà pris !");
+
+            // Génération d'un code secret d'approbation à 6 chiffres
+            const codeApprobation = Math.floor(100000 + Math.random() * 900000).toString();
+            
+            // On mémorise temporairement ses données
+            compteEnCoursCreation = { user: user, pass: pass, codeSecret: codeApprobation };
+
+            // On t'envoie le mail avec le code secret. La clé "code" s'affichera dans ton {{code}} sur EmailJS.
+            let templateParams = {
+                to_email: MON_ADRESSE_MAIL,
+                code: `DEMANDE D'ACCORD COMPTE. Pseudo : ${user}. CODE SECRET À LUI DONNER SI TU ES D'ACCORD : ${codeApprobation}`
+            };
+
+            emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, templateParams)
+                .then(function() {
+                    alert("Demande d'autorisation transmise à Joshua. Attends qu'il te donne le code d'activation pour finir !");
+                    document.getElementById('zoneActivationCompte').classList.remove('hidden');
+                }, function(err) {
+                    alert("Erreur système EmailJS. Pour tester hors-ligne, le code secret généré est : " + codeApprobation);
+                    document.getElementById('zoneActivationCompte').classList.remove('hidden');
+                });
+        }
+
+        // Étape 2 : L'utilisateur entre le code d'activation que tu lui as donné
+        function finaliserInscription() {
+            const codeSaisi = document.getElementById('codeActivationSaisi').value.trim();
+            if(!compteEnCoursCreation) return alert("Aucune inscription en cours.");
+
+            if(codeSaisi === compteEnCoursCreation.codeSecret) {
+                // Code valide -> On l'ajoute officiellement dans la liste
+                comptesMembres.push({ user: compteEnCoursCreation.user, pass: compteEnCoursCreation.pass });
+                localStorage.setItem('puff_comptes', JSON.stringify(comptesMembres));
+                
+                alert("Compte approuvé et activé avec succès ! Tu peux maintenant te connecter.");
+                compteEnCoursCreation = null;
+                document.getElementById('codeActivationSaisi').value = '';
+                document.getElementById('zoneActivationCompte').classList.add('hidden');
+                basculerEcran('loginScreen');
+            } else {
+                alert("Code d'approbation incorrect. Tu n'as pas l'autorisation de Joshua.");
+            }
+        }
+
+        // Connexion standard
+        function connexion() {
+            const user = document.getElementById('loginUser').value.trim().toLowerCase();
+            const pass = document.getElementById('loginPass').value;
+
+            const trouve = comptesMembres.find(c => c.user === user && c.pass === pass);
+            if(trouve) {
+                sessionStorage.setItem('puff_session_user', user);
+                demarrerApplication(user);
+            } else {
+                alert("Identifiant ou mot de passe incorrect !");
+            }
+        }
+
+        function demarrerApplication(username) {
+            document.getElementById('usernameConnecte').innerText = username.toUpperCase();
+            basculerEcran('appScreen');
+            afficherStocks();
+        }
+
+        function deconnexion() {
+            sessionStorage.removeItem('puff_session_user');
+            document.getElementById('loginUser').value = '';
+            document.getElementById('loginPass').value = '';
+            basculerEcran('authSelectionScreen');
+        }
+
+        // --- FONCTIONNALITÉS DE L'APPLICATION ---
+        function sauvegarder() {
+            localStorage.setItem('puff_stocks', JSON.stringify(stocks));
+            localStorage.setItem('puff_ventes', totalVentes.toString());
+            afficherStocks();
+        }
+
+        function afficherStocks() {
+            document.getElementById('totalVentes').innerText = totalVentes.toFixed(2) + " €";
+            const liste = document.getElementById('listeStocks');
+            liste.innerHTML = stocks.length === 0 ? '<p>Aucun produit enregistré.</p>' : '';
+            stocks.forEach(item => {
+                liste.innerHTML += `
+                    <div class="stock-item">
+                        <div class="stock-header">
+                            <div><strong>${item.saveur}</strong> - ${item.prix.toFixed(2)}€</div>
+                            <button class="btn-sell" onclick="vendre(${item.id})">🛒 Vendre 1</button>
+                        </div>
+                        <div class="stock-actions">
+                            <div class="qty-controls">
+                                <button class="btn-qty" onclick="ajusterStock(${item.id}, -1)">-</button>
+                                <input type="number" class="input-qty" value="${item.quantite}" onchange="modifierStockManuel(${item.id}, this.value)">
+                                <button class="btn-qty" onclick="ajusterStock(${item.id}, 1)">+</button>
+                            </div>
+                            <button class="btn-delete" onclick="supprimerPuff(${item.id})">🗑️</button>
+                        </div>
+                    </div>`;
+            });
+        }
+
+        function ajouterPuff() {
+            const saveur = document.getElementById('newSaveur').value.trim();
+            const prix = parseFloat(document.getElementById('newPrix').value);
+            const stock = parseInt(document.getElementById('newStock').value) || 0;
+            if(!saveur || isNaN(prix)) return alert("Veuillez remplir le nom et le prix !");
+            stocks.push({ id: Date.now(), saveur, quantite: stock, prix });
+            document.getElementById('newSaveur').value = '';
+            document.getElementById('newPrix').value = '';
+            sauvegarder();
+        }
+
+        function supprimerPuff(id) { if(confirm("Supprimer cette puff ?")) { stocks = stocks.filter(p => p.id !== id); sauvegarder(); } }
+        function ajusterStock(id, chg) { const item = stocks.find(p => p.id === id); if(item) { item.quantite = Math.max(0, item.quantite + chg); sauvegarder(); } }
+        function modifierStockManuel(id, val) { const item = stocks.find(p => p.id === id); if(item) { item.quantite = Math.max(0, parseInt(val) || 0); sauvegarder(); } }
+        function vendre(id) { const item = stocks.find(p => p.id === id); if(item && item.quantite > 0) { item.quantite--; totalVentes += item.prix; sauvegarder(); } else { alert("Plus de stock !"); } }
+        
+        function retirerArgent() {
+            const mnt = parseFloat(document.getElementById('montantRetrait').value);
+            const code = document.getElementById('codeRetrait').value;
+            if(isNaN(mnt) || mnt <= 0) return alert("Indique un montant valide !");
+            if(code !== "0910") return alert("Code PIN incorrect pour le retrait !");
+            totalVentes -= mnt;
+            document.getElementById('montantRetrait').value = '';
+            document.getElementById('codeRetrait').value = '';
+            sauvegarder();
+            alert("Retrait effectué avec succès !");
+        }
+
+        function ajouterArgentManuel() {
+            const mnt = parseFloat(document.getElementById('montantAjout').value);
+            const code = document.getElementById('codeAjout').value;
+            if(isNaN(mnt) || mnt <= 0) return alert("Indique un chiffre valide à ajouter !");
+            if(code !== "091010") return alert("Code PIN incorrect pour ajouter des fonds !");
+            totalVentes += mnt;
+            document.getElementById('montantAjout').value = '';
+            document.getElementById('codeAjout').value = '';
+            sauvegarder();
+            alert("Fonds ajoutés avec succès !");
+        }
+
+        function demanderCodeVerification() {
+            codeAleatoireGenere = Math.floor(100000 + Math.random() * 900000).toString();
+            let templateParams = { to_email: MON_ADRESSE_MAIL, code: "CODE REMISE À ZÉRO CAISSE : " + codeAleatoireGenere };
+
+            emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, templateParams)
+                .then(function() {
+                    alert("Un e-mail contenant le code de remise à zéro a été envoyé !");
+                    document.getElementById('zoneVerificationMail').style.display = 'block';
+                }, function(error) {
+                    alert("Erreur système. Code test généré : " + codeAleatoireGenere);
+                    document.getElementById('zoneVerificationMail').style.display = 'block';
+                });
+        }
+
+        function validerRemiseAZero() {
+            const codeSaisi = document.getElementById('codeSaisiMail').value.trim();
+            if(codeSaisi === codeAleatoireGenere) {
+                if(confirm("Voulez-vous vraiment vider la caisse ?")) {
+                    totalVentes = 0;
+                    document.getElementById('zoneVerificationMail').style.display = 'none';
+                    sauvegarder();
+                }
+            } else { alert("Code incorrect !"); }
+        }
+
+        // Studio Photo Canvas
+        const imageInput = document.getElementById('imageInput');
+        const canvas = document.getElementById('marketingCanvas');
+        const ctx = canvas.getContext('2d');
+
+        document.getElementById('btnGenerer').addEventListener('click', () => {
+            if (!imageInput.files[0]) return alert("Importez une image !");
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = new Image();
+                img.onload = function() {
+                    ctx.fillStyle = document.getElementById('bgColor').value;
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    ctx.drawImage(img, (canvas.width - 700)/2, (canvas.height - 700)/2, 700, 700);
+                    ctx.fillStyle = "#ffffff"; ctx.font = "bold 50px sans-serif"; ctx.textAlign = "center";
+                    ctx.fillText(document.getElementById('promoTexte').value, canvas.width / 2, 250);
+                    ctx.fillStyle = "#fff200"; ctx.font = "bold 75px sans-serif";
+                    ctx.fillText(document.getElementById('prixTexte').value, canvas.width / 2, 1700);
+                    canvas.style.display = "block"; document.getElementById('btnTelecharger').style.display = "block";
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(imageInput.files[0]);
+        });
+
+        document.getElementById('btnTelecharger').addEventListener('click', () => {
+            const link = document.createElement('a'); link.download = 'promo_puff.png'; link.href = canvas.toDataURL(); link.click();
+        });
+
+        // Auto-connexion si session active au rechargement
+        const sessionActive = sessionStorage.getItem('puff_session_user');
+        if(sessionActive && comptesMembres.find(c => c.user === sessionActive)) {
+            demarrerApplication(sessionActive);
+        }
+    </script>
+</body>
+</html>
